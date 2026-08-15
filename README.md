@@ -10,7 +10,8 @@ ReplyReady turns the difficult email you have been avoiding into three clear, re
 - Generate three materially different negotiation strategies in one call.
 - Switch between warmer, neutral, and firmer tones; all drafts rewrite together.
 - Edit any draft directly and copy it when it feels right.
-- No account, mailbox integration, history, or database.
+- Optionally connect Outlook, import one inbox message, and save a selected reply to Drafts.
+- No automatic sending, message history, or database.
 
 The app includes a deterministic preview engine so the complete interaction works without credentials. Add an OpenAI-compatible API key to use live model-generated drafts.
 
@@ -26,6 +27,18 @@ npm run dev
 
 Set `OPENAI_API_KEY` in `.env.local` for live AI. `AI_MODEL` and `AI_API_URL` are optional, which makes the server route compatible with providers that expose the OpenAI chat-completions shape.
 
+## Outlook setup
+
+Outlook is optional; paste-in and copy-out continue to work without it. To enable it:
+
+1. Create an app registration in Microsoft Entra ID that supports the account types you need.
+2. Add the Web redirect URI `http://127.0.0.1:3103/api/outlook/callback`.
+3. Add delegated Microsoft Graph permissions: `User.Read` and `Mail.ReadWrite`.
+4. Create a client secret and set `MICROSOFT_CLIENT_ID` and `MICROSOFT_CLIENT_SECRET` in `.env.local`.
+5. Set `OUTLOOK_COOKIE_SECRET` to a random value of at least 32 characters, then restart the server.
+
+The authorization flow uses PKCE. Access and refresh tokens are encrypted into HttpOnly, SameSite cookies and are never exposed to browser JavaScript. The integration only creates a reply draft; it does not request `Mail.Send` or send messages.
+
 ## Demo flow
 
 1. Open the app with the sample 30% discount request already loaded.
@@ -36,4 +49,4 @@ Set `OPENAI_API_KEY` in `.env.local` for live AI. `AI_MODEL` and `AI_API_URL` ar
 
 ## Scope
 
-ReplyReady intentionally handles paste-in, copy-out email decisions only. It does not connect to an inbox, retain messages, manage threads, or require sign-in.
+ReplyReady remains paste-in and copy-out by default. Outlook is an optional delegated connection for importing one message and saving one reply draft. It does not retain messages, sync whole threads, or send email automatically.

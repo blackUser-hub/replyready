@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type Tone = "warmer" | "neutral" | "firmer";
 type StrategyKind = "hold_firm" | "smaller_scope" | "meet_middle";
@@ -10,6 +10,23 @@ type Draft = {
   label: string;
   stance: string;
   body: string;
+};
+
+type OutlookStatus = {
+  loading: boolean;
+  configured: boolean;
+  connected: boolean;
+  user?: { name: string; email: string };
+};
+
+type OutlookMessage = {
+  id: string;
+  subject: string;
+  preview: string;
+  body?: string;
+  receivedAt: string;
+  isRead: boolean;
+  from: { name: string; address: string };
 };
 
 const sampleEmail = `Hi Alex,
@@ -77,11 +94,117 @@ export function ReplyReadyApp() {
   const [copied, setCopied] = useState<StrategyKind | null>(null);
   const [engine, setEngine] = useState<"preview" | "ai">("preview");
   const [error, setError] = useState("");
+  const [outlook, setOutlook] = useState<OutlookStatus>({
+    loading: true,
+    configured: false,
+    connected: false,
+  });
+  const [inboxOpen, setInboxOpen] = useState(false);
+  const [inboxLoading, setInboxLoading] = useState(false);
+  const [messages, setMessages] = useState<OutlookMessage[]>([]);
+  const [selectedMessage, setSelectedMessage] = useState<OutlookMessage | null>(null);
+  const [outlookNotice, setOutlookNotice] = useState("");
+  const [savingDraft, setSavingDraft] = useState<StrategyKind | null>(null);
+  const [savedDraft, setSavedDraft] = useState<StrategyKind | null>(null);
 
   const wordCount = useMemo(
     () => email.trim().split(/\s+/).filter(Boolean).length,
     [email],
   );
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("outlook") === "connected") {
+      setOutlookNotice("Outlook connected. Choose an email from your inbox.");
+    } else if (params.has("outlook_error")) {
+      setOutlookNotice("Microsoft sign-in was not completed. Please try again.");
+    }
+    if (params.has("outlook") || params.has("outlook_error")) {
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+
+    void fetch("/api/outlook/status")
+      .then(async (response) => {
+        const payload = (await response.json()) as Omit<OutlookStatus, "loading">;
+        setOutlook({ loading: false, ...payload });
+      })
+      .catch(() => setOutlook({ loading: false, configured: false, connected: false }));
+  }, []);
+
+  async function loadInbox() {
+    if (inboxOpen) {
+      setInboxOpen(false);
+      return;
+    }
+    setInboxOpen(true);
+    if (messages.length) return;
+    setInboxLoading(true);
+    setOutlookNotice("");
+    try {
+      const response = await fetch("/api/outlook/messages");
+      const payload = (await response.json()) as { messages?: OutlookMessage[]; error?: string };
+      if (!response.ok || !payload.messages) throw new Error(payload.error || "Could not load your inbox.");
+      setMessages(payload.messages);
+    } catch (inboxError) {
+      setOutlookNotice(inboxError instanceof Error ? inboxError.message : "Could not load your inbox.");
+    } finally {
+      setInboxLoading(false);
+    }
+  }
+
+  async function selectOutlookMessage(message: OutlookMessage) {
+    setInboxLoading(true);
+    setOutlookNotice("");
+    try {
+      const response = await fetch(`/api/outlook/messages?id=${encodeURIComponent(message.id)}`);
+      const payload = (await response.json()) as { message?: OutlookMessage; error?: string };
+      if (!response.ok || !payload.message) throw new Error(payload.error || "Could not open this email.");
+      const fullMessage = payload.message;
+      const sender = fullMessage.from.address
+        ? `${fullMessage.from.name} <${fullMessage.from.address}>`
+        : fullMessage.from.name;
+      setEmail(`From: ${sender}\nSubject: ${fullMessage.subject}\n\n${fullMessage.body || fullMessage.preview}`);
+      setSelectedMessage(fullMessage);
+      setInboxOpen(false);
+      setSavedDraft(null);
+      setOutlookNotice(`Imported “${fullMessage.subject}” from Outlook.`);
+    } catch (messageError) {
+      setOutlookNotice(messageError instanceof Error ? messageError.message : "Could not open this email.");
+    } finally {
+      setInboxLoading(false);
+    }
+  }
+
+  async function disconnectOutlook() {
+    await fetch("/api/outlook/disconnect", { method: "POST" });
+    setOutlook({ loading: false, configured: true, connected: false });
+    setMessages([]);
+    setSelectedMessage(null);
+    setInboxOpen(false);
+    setOutlookNotice("Outlook disconnected.");
+  }
+
+  async function saveToOutlook(draft: Draft) {
+    if (!selectedMessage) return;
+    setSavingDraft(draft.kind);
+    setSavedDraft(null);
+    setOutlookNotice("");
+    try {
+      const response = await fetch("/api/outlook/drafts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messageId: selectedMessage.id, body: draft.body }),
+      });
+      const payload = (await response.json()) as { saved?: boolean; error?: string };
+      if (!response.ok || !payload.saved) throw new Error(payload.error || "Could not save the Outlook draft.");
+      setSavedDraft(draft.kind);
+      setOutlookNotice("Reply saved to your Outlook Drafts. Nothing was sent.");
+    } catch (draftError) {
+      setOutlookNotice(draftError instanceof Error ? draftError.message : "Could not save the Outlook draft.");
+    } finally {
+      setSavingDraft(null);
+    }
+  }
 
   async function generateDrafts(nextTone: Tone = tone) {
     if (email.trim().length < 30 || isGenerating) return;
@@ -175,6 +298,80 @@ export function ReplyReadyApp() {
             </button>
           </div>
 
+          <section className={`outlook-connector ${outlook.connected ? "connected" : ""}`} aria-label="Outlook connection">
+            <div className="outlook-connector-row">
+              <div className="outlook-identity">
+                <span className="outlook-mark" aria-hidden="true">O</span>
+                <div>
+                  <strong>{outlook.connected ? outlook.user?.name || "Outlook connected" : "Bring in an Outlook email"}</strong>
+                  <span>
+                    {outlook.loading
+                      ? "Checking connection…"
+                      : outlook.connected
+                        ? outlook.user?.email || "Microsoft Graph connected"
+                        : "Import one message, save one reply draft"}
+                  </span>
+                </div>
+              </div>
+              <div className="outlook-actions">
+                {outlook.loading ? null : outlook.connected ? (
+                  <>
+                    <button type="button" className="connector-button primary" onClick={() => void loadInbox()}>
+                      {inboxOpen ? "Close inbox" : "Open inbox"}
+                    </button>
+                    <button type="button" className="connector-button quiet" onClick={() => void disconnectOutlook()}>
+                      Disconnect
+                    </button>
+                  </>
+                ) : outlook.configured ? (
+                  <a className="connector-button primary" href="/api/outlook/connect">Connect Outlook</a>
+                ) : (
+                  <button
+                    type="button"
+                    className="connector-button primary"
+                    onClick={() => setOutlookNotice("Add your Microsoft Entra credentials to .env.local, then restart the local server.")}
+                  >
+                    Set up Outlook
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {outlookNotice ? <p className="outlook-notice" role="status">{outlookNotice}</p> : null}
+
+            {inboxOpen ? (
+              <div className="inbox-popover">
+                <div className="inbox-title">
+                  <span>Recent inbox</span>
+                  <span>Choose one email</span>
+                </div>
+                {inboxLoading ? (
+                  <div className="inbox-loading">Loading Outlook…</div>
+                ) : messages.length ? (
+                  <div className="message-list">
+                    {messages.map((message) => (
+                      <button key={message.id} type="button" onClick={() => void selectOutlookMessage(message)}>
+                        <span className={`message-unread ${message.isRead ? "read" : ""}`} aria-hidden="true" />
+                        <span className="message-main">
+                          <strong>{message.from.name}</strong>
+                          <span>{message.subject}</span>
+                          <small>{message.preview}</small>
+                        </span>
+                        <time dateTime={message.receivedAt}>
+                          {message.receivedAt
+                            ? new Intl.DateTimeFormat("en", { month: "short", day: "numeric" }).format(new Date(message.receivedAt))
+                            : ""}
+                        </time>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="inbox-loading">Your inbox is empty.</div>
+                )}
+              </div>
+            ) : null}
+          </section>
+
           <label className="sr-only" htmlFor="incoming-email">
             Paste the email you need to answer
           </label>
@@ -189,7 +386,7 @@ export function ReplyReadyApp() {
 
           <div className="composer-meta">
             <span>{wordCount} words</span>
-            <span>Your text is not saved</span>
+            <span>{selectedMessage ? "Imported from Outlook" : "Your text is not saved"}</span>
           </div>
 
           <div className="tone-section">
@@ -258,9 +455,25 @@ export function ReplyReadyApp() {
                 />
                 <div className="card-actions">
                   <span>{draft.body.trim().split(/\s+/).length} words</span>
-                  <button type="button" onClick={() => void copyDraft(draft)}>
-                    {copied === draft.kind ? "Copied ✓" : "Copy reply"}
-                  </button>
+                  <div className="card-button-group">
+                    {outlook.connected && selectedMessage ? (
+                      <button
+                        type="button"
+                        className="save-outlook-button"
+                        disabled={savingDraft !== null}
+                        onClick={() => void saveToOutlook(draft)}
+                      >
+                        {savingDraft === draft.kind
+                          ? "Saving…"
+                          : savedDraft === draft.kind
+                            ? "Saved ✓"
+                            : "Save draft"}
+                      </button>
+                    ) : null}
+                    <button type="button" onClick={() => void copyDraft(draft)}>
+                      {copied === draft.kind ? "Copied ✓" : "Copy reply"}
+                    </button>
+                  </div>
                 </div>
                 {isGenerating ? (
                   <div className="card-loading" aria-hidden="true">

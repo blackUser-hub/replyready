@@ -159,6 +159,129 @@ button { color: inherit; }
 
 .text-button:hover { color: var(--orange); }
 
+.outlook-connector {
+  position: relative;
+  margin-bottom: 18px;
+  padding: 14px;
+  border: 1px solid rgba(16, 104, 214, .22);
+  background: #f2f7ff;
+}
+
+.outlook-connector.connected {
+  background: #edf7f1;
+  border-color: rgba(44, 129, 80, .24);
+}
+
+.outlook-connector-row,
+.outlook-identity,
+.outlook-actions,
+.inbox-title,
+.card-button-group {
+  display: flex;
+  align-items: center;
+}
+
+.outlook-connector-row { justify-content: space-between; gap: 12px; }
+.outlook-identity { min-width: 0; gap: 10px; }
+.outlook-identity > div { min-width: 0; }
+
+.outlook-mark {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 3px;
+  background: #1068d6;
+  color: white;
+  font-weight: 780;
+  box-shadow: 5px 0 0 #2b88d8;
+}
+
+.outlook-identity strong,
+.outlook-identity span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.outlook-identity strong { font-size: 12px; letter-spacing: -.01em; }
+.outlook-identity span { margin-top: 3px; color: var(--muted); font-size: 9px; }
+.outlook-actions { flex: 0 0 auto; gap: 5px; }
+
+.connector-button {
+  min-height: 31px;
+  padding: 0 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(23,23,19,.18);
+  background: white;
+  color: var(--ink);
+  cursor: pointer;
+  text-decoration: none;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.connector-button.primary { border-color: #1068d6; background: #1068d6; color: white; }
+.connector-button.quiet { border: 0; background: transparent; color: var(--muted); }
+.connector-button:hover { filter: brightness(.94); }
+
+.outlook-notice {
+  margin: 11px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid rgba(23,23,19,.1);
+  color: #33536e;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.inbox-popover {
+  margin: 13px -14px -14px;
+  border-top: 1px solid rgba(16, 104, 214, .18);
+  background: white;
+}
+
+.inbox-title {
+  justify-content: space-between;
+  padding: 11px 13px;
+  color: var(--muted);
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.inbox-loading { padding: 28px 14px; color: var(--muted); font-size: 11px; text-align: center; }
+.message-list { max-height: 330px; overflow-y: auto; border-top: 1px solid var(--line); }
+
+.message-list > button {
+  width: 100%;
+  padding: 12px 13px;
+  display: grid;
+  grid-template-columns: 7px minmax(0, 1fr) auto;
+  gap: 9px;
+  align-items: start;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: white;
+  cursor: pointer;
+  text-align: left;
+}
+
+.message-list > button:hover { background: #f4f7fb; }
+.message-unread { width: 6px; height: 6px; margin-top: 4px; border-radius: 50%; background: #1068d6; }
+.message-unread.read { background: #cfcbc1; }
+.message-main { min-width: 0; }
+.message-main strong, .message-main span, .message-main small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.message-main strong { margin-bottom: 2px; font-size: 10px; }
+.message-main span { margin-bottom: 4px; font-size: 10px; }
+.message-main small { color: var(--muted); font-size: 9px; }
+.message-list time { color: #999489; font-family: var(--font-geist-mono), monospace; font-size: 8px; }
+
 .email-input {
   width: 100%;
   min-height: 300px;
@@ -321,6 +444,10 @@ button { color: inherit; }
 .card-actions > span { color: #9d988e; font-family: var(--font-geist-mono), monospace; font-size: 9px; text-transform: uppercase; }
 .card-actions button { padding: 8px 11px; border: 1px solid var(--ink); background: transparent; cursor: pointer; font-size: 10px; font-weight: 700; }
 .card-actions button:hover { background: var(--ink); color: white; }
+.card-button-group { gap: 5px; }
+.card-actions .save-outlook-button { border-color: #1068d6; color: #1068d6; }
+.card-actions .save-outlook-button:hover { background: #1068d6; color: white; }
+.card-actions button:disabled { opacity: .52; cursor: wait; }
 
 .card-loading {
   position: absolute;
@@ -381,6 +508,9 @@ footer {
   .workspace { margin: 0 8px 20px; }
   .composer-panel, .results-panel { padding: 24px 16px; }
   .tone-section { align-items: flex-start; flex-direction: column; }
+  .outlook-connector-row { align-items: flex-start; flex-direction: column; }
+  .outlook-actions { width: 100%; }
+  .connector-button { flex: 1; }
   .tone-control { width: 100%; }
   .tone-control button { flex: 1; padding-inline: 8px; }
   .draft-grid { grid-template-columns: 1fr; }
