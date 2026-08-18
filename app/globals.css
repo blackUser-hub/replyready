@@ -125,6 +125,180 @@ button { color: inherit; }
   letter-spacing: -.018em;
 }
 
+.crm-section {
+  margin: 0 clamp(14px, 2vw, 32px) 28px;
+  padding: clamp(22px, 3vw, 38px);
+  overflow: hidden;
+  background: var(--ink);
+  color: white;
+  box-shadow: 0 26px 80px rgba(26, 23, 16, .16);
+}
+
+.crm-header,
+.crm-title-line,
+.crm-summary,
+.crm-toolbar,
+.crm-column-heading,
+.crm-column-heading > div,
+.crm-card-top,
+.crm-card-footer,
+.crm-footnote {
+  display: flex;
+  align-items: center;
+}
+
+.crm-header { justify-content: space-between; gap: 30px; }
+.crm-title-line { gap: 12px; }
+.crm-title-line .step-label { margin: 0; color: var(--lime); }
+.crm-header h2 { margin: 9px 0 5px; font-size: clamp(28px, 3.2vw, 48px); line-height: 1; letter-spacing: -.055em; }
+.crm-header p { margin: 0; color: #aaa79d; font-size: 13px; }
+
+.crm-live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border: 1px solid rgba(255,255,255,.15);
+  border-radius: 999px;
+  color: #aaa79d;
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 8px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.crm-live-badge > span { width: 6px; height: 6px; border-radius: 50%; background: #8d8b83; }
+.crm-live-badge.live { color: #d9efa8; border-color: rgba(215,243,108,.25); }
+.crm-live-badge.live > span { background: var(--lime); box-shadow: 0 0 0 4px rgba(215,243,108,.12); }
+
+.crm-summary { flex: 0 0 auto; border: 1px solid rgba(255,255,255,.14); }
+.crm-summary > div { min-width: 78px; padding: 12px 16px; border-right: 1px solid rgba(255,255,255,.14); text-align: center; }
+.crm-summary > div:last-child { border-right: 0; }
+.crm-summary strong, .crm-summary span { display: block; }
+.crm-summary strong { font-size: 24px; line-height: 1; letter-spacing: -.05em; }
+.crm-summary span { margin-top: 5px; color: #918e85; font-family: var(--font-geist-mono), monospace; font-size: 7px; letter-spacing: .08em; text-transform: uppercase; }
+
+.crm-toolbar {
+  margin-top: 28px;
+  padding: 8px;
+  gap: 8px;
+  background: #262621;
+  border: 1px solid rgba(255,255,255,.1);
+}
+
+.crm-search {
+  min-width: 240px;
+  flex: 1;
+  height: 38px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #f7f5ef;
+  color: var(--ink);
+}
+
+.crm-search > span { color: #8b887f; font-size: 18px; }
+.crm-search input { width: 100%; border: 0; outline: 0; background: transparent; color: var(--ink); font-size: 11px; }
+.crm-search input::placeholder { color: #949086; }
+
+.crm-filters { height: 38px; display: inline-flex; align-items: center; padding: 3px; border: 1px solid rgba(255,255,255,.13); }
+.crm-filters button { height: 30px; padding: 0 11px; border: 0; background: transparent; color: #aaa79d; cursor: pointer; font-size: 9px; font-weight: 650; }
+.crm-filters button.active { background: white; color: var(--ink); }
+
+.crm-sync-button {
+  height: 38px;
+  min-width: 114px;
+  padding: 0 13px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid var(--lime);
+  background: var(--lime);
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 750;
+}
+
+.crm-sync-button:disabled { border-color: rgba(255,255,255,.12); background: rgba(255,255,255,.08); color: #827f77; cursor: not-allowed; }
+.spinning { display: inline-block; animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.crm-board {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(250px, 1fr));
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.crm-column {
+  min-height: 430px;
+  padding: 14px 11px 12px;
+  background: #eeebe2;
+  color: var(--ink);
+}
+
+.crm-column-heading { justify-content: space-between; padding: 0 3px; }
+.crm-column-heading > div { gap: 7px; }
+.crm-column-heading strong { font-size: 11px; }
+.crm-column-heading > span { min-width: 22px; padding: 3px 6px; border-radius: 999px; background: rgba(23,23,19,.08); font-family: var(--font-geist-mono), monospace; font-size: 8px; text-align: center; }
+.stage-dot { width: 7px; height: 7px; border-radius: 50%; background: #111; }
+.stage-new .stage-dot { background: var(--orange); }
+.stage-needs_reply .stage-dot { background: #5c87de; }
+.stage-draft_ready .stage-dot { background: #a3bb3d; }
+.stage-done .stage-dot { background: #77746d; }
+.crm-column-hint { margin: 4px 3px 13px; color: #8d887e; font-size: 9px; }
+.crm-card-list { display: grid; gap: 8px; }
+
+.crm-card {
+  padding: 12px;
+  border: 1px solid rgba(23,23,19,.13);
+  background: white;
+  cursor: pointer;
+  box-shadow: 0 3px 0 rgba(23,23,19,.04);
+  transition: transform .16s, border-color .16s, box-shadow .16s;
+}
+
+.crm-card:hover { transform: translateY(-2px); border-color: rgba(23,23,19,.32); box-shadow: 0 8px 20px rgba(34,30,20,.08); }
+.crm-card.priority { border-left: 4px solid var(--orange); padding-left: 9px; }
+.crm-card.selected { box-shadow: 0 0 0 2px var(--blue); }
+.crm-card-top { gap: 8px; }
+.crm-card-top > div { min-width: 0; flex: 1; }
+.crm-card-top strong, .crm-card-top small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crm-card-top strong { font-size: 10px; }
+.crm-card-top small { margin-top: 2px; color: #999489; font-size: 8px; }
+.crm-card-top button { width: 25px; height: 25px; border: 0; background: transparent; color: #aaa59a; cursor: pointer; font-size: 16px; }
+.crm-card-top button.priority-active { color: var(--orange); }
+
+.crm-avatar {
+  width: 29px;
+  height: 29px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--blue);
+  color: #213355;
+  font-size: 10px;
+  font-weight: 750;
+}
+
+.crm-avatar.read { background: #e4e0d7; color: #77736b; }
+.crm-card h3 { margin: 12px 0 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; letter-spacing: -.025em; }
+.crm-card > p { height: 31px; margin: 0; overflow: hidden; color: #77736b; font-size: 9px; line-height: 1.7; }
+.crm-card-fields { margin-top: 10px; display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 5px; }
+.crm-card-fields select, .crm-card-fields input { min-width: 0; height: 28px; padding: 0 7px; border: 1px solid rgba(23,23,19,.13); outline: 0; background: #f6f4ee; color: var(--ink); font-size: 8px; }
+.crm-card-fields input:focus, .crm-card-fields select:focus { border-color: #5c87de; }
+.crm-card-footer { justify-content: space-between; margin-top: 10px; padding-top: 9px; border-top: 1px solid rgba(23,23,19,.1); color: #98938a; font-family: var(--font-geist-mono), monospace; font-size: 7px; }
+.crm-card-footer span { color: #5a76ad; font-family: var(--font-geist-sans), Arial, sans-serif; font-weight: 650; }
+.crm-empty { padding: 42px 10px; border: 1px dashed rgba(23,23,19,.18); color: #9b968c; font-size: 9px; text-align: center; }
+
+.crm-footnote { justify-content: space-between; margin-top: 13px; color: #86837b; font-family: var(--font-geist-mono), monospace; font-size: 8px; letter-spacing: .03em; }
+
 .workspace {
   display: grid;
   grid-template-columns: minmax(320px, .38fr) minmax(640px, .62fr);
@@ -495,6 +669,8 @@ footer {
 }
 
 @media (max-width: 1120px) {
+  .crm-header { align-items: flex-start; flex-direction: column; }
+  .crm-board { grid-template-columns: repeat(4, 270px); }
   .workspace { grid-template-columns: 1fr; }
   .composer-panel { border-right: 0; border-bottom: 1px solid var(--line); }
   .email-input { min-height: 240px; }
@@ -505,6 +681,15 @@ footer {
   .topbar-note { display: none; }
   .hero { padding: 48px 20px 38px; }
   .hero h1 { font-size: clamp(44px, 13vw, 68px); }
+  .crm-section { margin: 0 8px 20px; padding: 22px 14px; }
+  .crm-summary { width: 100%; }
+  .crm-summary > div { min-width: 0; flex: 1; }
+  .crm-toolbar { align-items: stretch; flex-wrap: wrap; }
+  .crm-search { min-width: 100%; }
+  .crm-filters { flex: 1; }
+  .crm-filters button { flex: 1; }
+  .crm-sync-button { flex: 1; }
+  .crm-footnote { align-items: flex-start; flex-direction: column; gap: 5px; }
   .workspace { margin: 0 8px 20px; }
   .composer-panel, .results-panel { padding: 24px 16px; }
   .tone-section { align-items: flex-start; flex-direction: column; }

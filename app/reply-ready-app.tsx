@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type Tone = "warmer" | "neutral" | "firmer";
 type StrategyKind = "hold_firm" | "smaller_scope" | "meet_middle";
@@ -28,6 +28,71 @@ type OutlookMessage = {
   isRead: boolean;
   from: { name: string; address: string };
 };
+
+type CrmStage = "new" | "needs_reply" | "draft_ready" | "done";
+type CrmFilter = "all" | "unread" | "priority";
+
+type CrmRecord = OutlookMessage & {
+  stage: CrmStage;
+  priority: boolean;
+  note: string;
+};
+
+type CrmChange = OutlookMessage & { removed: boolean };
+
+const crmStages: Array<{ id: CrmStage; label: string; hint: string }> = [
+  { id: "new", label: "New", hint: "Just arrived" },
+  { id: "needs_reply", label: "Needs reply", hint: "Decision needed" },
+  { id: "draft_ready", label: "Draft ready", hint: "Waiting for review" },
+  { id: "done", label: "Done", hint: "Handled" },
+];
+
+const previewCrmRecords: CrmRecord[] = [
+  {
+    id: "preview-1",
+    subject: "Can we revisit the project fee?",
+    preview: "The revised budget is lower than expected, but we would like to keep the launch date…",
+    receivedAt: "2026-08-11T08:42:00.000Z",
+    isRead: false,
+    from: { name: "Morgan Lee", address: "morgan@example.com" },
+    stage: "new",
+    priority: true,
+    note: "30% discount request",
+  },
+  {
+    id: "preview-2",
+    subject: "One more round of revisions",
+    preview: "The team has a few additional changes that were not included in the original brief…",
+    receivedAt: "2026-08-10T16:15:00.000Z",
+    isRead: true,
+    from: { name: "Nora Bennett", address: "nora@example.com" },
+    stage: "needs_reply",
+    priority: false,
+    note: "Check original scope",
+  },
+  {
+    id: "preview-3",
+    subject: "Re: updated delivery timeline",
+    preview: "Thanks for explaining the delay. Please send the adjusted milestones when they are ready…",
+    receivedAt: "2026-08-09T11:24:00.000Z",
+    isRead: true,
+    from: { name: "Caleb Wright", address: "caleb@example.com" },
+    stage: "draft_ready",
+    priority: false,
+    note: "Draft reviewed",
+  },
+  {
+    id: "preview-4",
+    subject: "Contract extension confirmed",
+    preview: "Everything looks good from our side. We are happy to proceed with the extension…",
+    receivedAt: "2026-08-08T09:05:00.000Z",
+    isRead: true,
+    from: { name: "Priya Shah", address: "priya@example.com" },
+    stage: "done",
+    priority: false,
+    note: "Closed",
+  },
+];
 
 const sampleEmail = `Hi Alex,
 
@@ -106,11 +171,40 @@ export function ReplyReadyApp() {
   const [outlookNotice, setOutlookNotice] = useState("");
   const [savingDraft, setSavingDraft] = useState<StrategyKind | null>(null);
   const [savedDraft, setSavedDraft] = useState<StrategyKind | null>(null);
+  const [crmRecords, setCrmRecords] = useState<CrmRecord[]>([]);
+  const [previewRecords, setPreviewRecords] = useState<CrmRecord[]>(previewCrmRecords);
+  const [crmLoaded, setCrmLoaded] = useState(false);
+  const [crmSearch, setCrmSearch] = useState("");
+  const [crmFilter, setCrmFilter] = useState<CrmFilter>("all");
+  const [lastSync, setLastSync] = useState<string | null>(null);
+  const [crmSyncing, setCrmSyncing] = useState(false);
+  const deltaLinkRef = useRef<string | null>(null);
+  const syncingRef = useRef(false);
 
   const wordCount = useMemo(
     () => email.trim().split(/\s+/).filter(Boolean).length,
     [email],
   );
+
+  const activeCrmRecords = outlook.connected ? crmRecords : previewRecords;
+  const visibleCrmRecords = useMemo(() => {
+    const query = crmSearch.trim().toLowerCase();
+    return activeCrmRecords.filter((record) => {
+      const matchesQuery =
+        !query ||
+        `${record.from.name} ${record.from.address} ${record.subject} ${record.preview} ${record.note}`
+          .toLowerCase()
+          .includes(query);
+      const matchesFilter =
+        crmFilter === "all" ||
+        (crmFilter === "unread" && !record.isRead) ||
+        (crmFilter === "priority" && record.priority);
+      return matchesQuery && matchesFilter;
+    });
+  }, [activeCrmRecords, crmFilter, crmSearch]);
+
+  const unreadCount = activeCrmRecords.filter((record) => !record.isRead).length;
+  const waitingCount = activeCrmRecords.filter((record) => record.stage === "needs_reply").length;
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -130,6 +224,113 @@ export function ReplyReadyApp() {
       })
       .catch(() => setOutlook({ loading: false, configured: false, connected: false }));
   }, []);
+
+  useEffect(() => {
+    try {
+      const savedRecords = window.localStorage.getItem("replyready.crm.records.v1");
+      const savedDelta = window.localStorage.getItem("replyready.crm.delta.v1");
+      const savedSync = window.localStorage.getItem("replyready.crm.last-sync.v1");
+      if (savedRecords) setCrmRecords(JSON.parse(savedRecords) as CrmRecord[]);
+      if (savedDelta) deltaLinkRef.current = savedDelta;
+      if (savedSync) setLastSync(savedSync);
+    } catch {
+      window.localStorage.removeItem("replyready.crm.records.v1");
+      window.localStorage.removeItem("replyready.crm.delta.v1");
+    } finally {
+      setCrmLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!crmLoaded) return;
+    window.localStorage.setItem("replyready.crm.records.v1", JSON.stringify(crmRecords));
+  }, [crmLoaded, crmRecords]);
+
+  const syncCrm = useCallback(async () => {
+    if (!outlook.connected || syncingRef.current) return;
+    syncingRef.current = true;
+    setCrmSyncing(true);
+    try {
+      const response = await fetch("/api/outlook/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deltaLink: deltaLinkRef.current }),
+      });
+      const payload = (await response.json()) as {
+        changes?: CrmChange[];
+        deltaLink?: string | null;
+        syncedAt?: string;
+        error?: string;
+      };
+      if (!response.ok || !payload.changes) throw new Error(payload.error || "Outlook sync failed.");
+
+      setCrmRecords((current) => {
+        const records = new Map(current.map((record) => [record.id, record]));
+        for (const change of payload.changes || []) {
+          if (change.removed) {
+            records.delete(change.id);
+            continue;
+          }
+          const existing = records.get(change.id);
+          records.set(change.id, {
+            ...change,
+            stage: existing?.stage || (change.isRead ? "needs_reply" : "new"),
+            priority: existing?.priority || false,
+            note: existing?.note || "",
+          });
+        }
+        return [...records.values()].sort(
+          (first, second) => Date.parse(second.receivedAt || "0") - Date.parse(first.receivedAt || "0"),
+        );
+      });
+
+      if (payload.deltaLink) {
+        deltaLinkRef.current = payload.deltaLink;
+        window.localStorage.setItem("replyready.crm.delta.v1", payload.deltaLink);
+      }
+      if (payload.syncedAt) {
+        setLastSync(payload.syncedAt);
+        window.localStorage.setItem("replyready.crm.last-sync.v1", payload.syncedAt);
+      }
+    } catch (syncError) {
+      setOutlookNotice(syncError instanceof Error ? syncError.message : "Outlook sync failed.");
+    } finally {
+      syncingRef.current = false;
+      setCrmSyncing(false);
+    }
+  }, [outlook.connected]);
+
+  useEffect(() => {
+    if (!outlook.connected) return;
+    void syncCrm();
+    const interval = window.setInterval(() => void syncCrm(), 30_000);
+    return () => window.clearInterval(interval);
+  }, [outlook.connected, syncCrm]);
+
+  function updateCrmRecord(id: string, values: Partial<Pick<CrmRecord, "stage" | "priority" | "note">>) {
+    const update = (records: CrmRecord[]) =>
+      records.map((record) => (record.id === id ? { ...record, ...values } : record));
+    if (outlook.connected) setCrmRecords(update);
+    else setPreviewRecords(update);
+  }
+
+  async function openCrmRecord(record: CrmRecord) {
+    if (outlook.connected) {
+      await selectOutlookMessage(record);
+    } else {
+      const sender = record.from.address
+        ? `${record.from.name} <${record.from.address}>`
+        : record.from.name;
+      setEmail(`From: ${sender}\nSubject: ${record.subject}\n\n${record.preview}`);
+      setSelectedMessage(null);
+      setOutlookNotice("Preview email loaded. Connect Outlook to create a real linked draft.");
+    }
+    updateCrmRecord(record.id, { stage: "needs_reply" });
+    window.setTimeout(
+      () => document.getElementById("reply-workspace")?.scrollIntoView({ behavior: "smooth", block: "start" }),
+      50,
+    );
+  }
 
   async function loadInbox() {
     if (inboxOpen) {
@@ -165,6 +366,7 @@ export function ReplyReadyApp() {
         : fullMessage.from.name;
       setEmail(`From: ${sender}\nSubject: ${fullMessage.subject}\n\n${fullMessage.body || fullMessage.preview}`);
       setSelectedMessage(fullMessage);
+      updateCrmRecord(fullMessage.id, { stage: "needs_reply" });
       setInboxOpen(false);
       setSavedDraft(null);
       setOutlookNotice(`Imported “${fullMessage.subject}” from Outlook.`);
@@ -198,6 +400,7 @@ export function ReplyReadyApp() {
       const payload = (await response.json()) as { saved?: boolean; error?: string };
       if (!response.ok || !payload.saved) throw new Error(payload.error || "Could not save the Outlook draft.");
       setSavedDraft(draft.kind);
+      updateCrmRecord(selectedMessage.id, { stage: "draft_ready" });
       setOutlookNotice("Reply saved to your Outlook Drafts. Nothing was sent.");
     } catch (draftError) {
       setOutlookNotice(draftError instanceof Error ? draftError.message : "Could not save the Outlook draft.");
@@ -282,7 +485,147 @@ export function ReplyReadyApp() {
         </p>
       </section>
 
-      <section className="workspace" aria-label="Reply generator">
+      <section className="crm-section" aria-label="Outlook CRM">
+        <header className="crm-header">
+          <div>
+            <div className="crm-title-line">
+              <span className="step-label">Outlook CRM</span>
+              <span className={`crm-live-badge ${outlook.connected ? "live" : ""}`}>
+                <span aria-hidden="true" />
+                {outlook.connected ? "Live inbox" : "Preview data"}
+              </span>
+            </div>
+            <h2>Every difficult email, moving forward.</h2>
+            <p>New mail appears automatically. Decide, draft, and move on.</p>
+          </div>
+          <div className="crm-summary">
+            <div><strong>{activeCrmRecords.length}</strong><span>Tracked</span></div>
+            <div><strong>{unreadCount}</strong><span>Unread</span></div>
+            <div><strong>{waitingCount}</strong><span>Waiting</span></div>
+          </div>
+        </header>
+
+        <div className="crm-toolbar">
+          <label className="crm-search">
+            <span className="sr-only">Search CRM emails</span>
+            <span aria-hidden="true">⌕</span>
+            <input
+              value={crmSearch}
+              onChange={(event) => setCrmSearch(event.target.value)}
+              placeholder="Search sender, subject or note"
+            />
+          </label>
+          <div className="crm-filters" role="group" aria-label="CRM filters">
+            {(["all", "unread", "priority"] as CrmFilter[]).map((filter) => (
+              <button
+                type="button"
+                key={filter}
+                className={crmFilter === filter ? "active" : ""}
+                aria-pressed={crmFilter === filter}
+                onClick={() => setCrmFilter(filter)}
+              >
+                {filter[0].toUpperCase() + filter.slice(1)}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            className="crm-sync-button"
+            disabled={!outlook.connected || crmSyncing}
+            onClick={() => void syncCrm()}
+          >
+            <span className={crmSyncing ? "spinning" : ""} aria-hidden="true">↻</span>
+            {crmSyncing ? "Syncing" : outlook.connected ? "Sync now" : "Connect for live mail"}
+          </button>
+        </div>
+
+        <div className="crm-board">
+          {crmStages.map((stage) => {
+            const records = visibleCrmRecords.filter((record) => record.stage === stage.id);
+            return (
+              <div className={`crm-column stage-${stage.id}`} key={stage.id}>
+                <div className="crm-column-heading">
+                  <div><span className="stage-dot" aria-hidden="true" /><strong>{stage.label}</strong></div>
+                  <span>{records.length}</span>
+                </div>
+                <p className="crm-column-hint">{stage.hint}</p>
+                <div className="crm-card-list">
+                  {records.length ? records.map((record) => (
+                    <article
+                      className={`crm-card ${record.priority ? "priority" : ""} ${selectedMessage?.id === record.id ? "selected" : ""}`}
+                      key={record.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => void openCrmRecord(record)}
+                      onKeyDown={(event) => {
+                        if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) {
+                          event.preventDefault();
+                          void openCrmRecord(record);
+                        }
+                      }}
+                    >
+                      <div className="crm-card-top">
+                        <span className={`crm-avatar ${record.isRead ? "read" : ""}`}>
+                          {record.from.name.slice(0, 1).toUpperCase()}
+                        </span>
+                        <div>
+                          <strong>{record.from.name}</strong>
+                          <small>{record.from.address}</small>
+                        </div>
+                        <button
+                          type="button"
+                          className={record.priority ? "priority-active" : ""}
+                          aria-label={record.priority ? "Remove priority" : "Mark as priority"}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            updateCrmRecord(record.id, { priority: !record.priority });
+                          }}
+                        >
+                          {record.priority ? "★" : "☆"}
+                        </button>
+                      </div>
+                      <h3>{record.subject}</h3>
+                      <p>{record.preview}</p>
+                      <div className="crm-card-fields" onClick={(event) => event.stopPropagation()}>
+                        <select
+                          aria-label={`Stage for ${record.subject}`}
+                          value={record.stage}
+                          onChange={(event) => updateCrmRecord(record.id, { stage: event.target.value as CrmStage })}
+                        >
+                          {crmStages.map((option) => <option value={option.id} key={option.id}>{option.label}</option>)}
+                        </select>
+                        <input
+                          aria-label={`Note for ${record.subject}`}
+                          value={record.note}
+                          onChange={(event) => updateCrmRecord(record.id, { note: event.target.value })}
+                          placeholder="Add note"
+                        />
+                      </div>
+                      <div className="crm-card-footer">
+                        <time dateTime={record.receivedAt}>
+                          {record.receivedAt
+                            ? new Intl.DateTimeFormat("en", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(record.receivedAt))
+                            : ""}
+                        </time>
+                        <span>Open in ReplyReady →</span>
+                      </div>
+                    </article>
+                  )) : (
+                    <div className="crm-empty">No emails here</div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="crm-footnote">
+          <span>{outlook.connected ? "Outlook checks automatically every 30 seconds" : "Preview CRM — connect Outlook below for live email"}</span>
+          <span>{lastSync ? `Last synced ${new Intl.DateTimeFormat("en", { hour: "2-digit", minute: "2-digit" }).format(new Date(lastSync))}` : "CRM fields stay on this device"}</span>
+        </div>
+      </section>
+
+      <section className="workspace" id="reply-workspace" aria-label="Reply generator">
         <div className="composer-panel">
           <div className="panel-heading">
             <div>

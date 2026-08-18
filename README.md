@@ -11,6 +11,7 @@ ReplyReady turns the difficult email you have been avoiding into three clear, re
 - Switch between warmer, neutral, and firmer tones; all drafts rewrite together.
 - Edit any draft directly and copy it when it feels right.
 - Optionally connect Outlook, import one inbox message, and save a selected reply to Drafts.
+- Track incoming mail on a four-stage CRM board that refreshes every 30 seconds.
 - No automatic sending, message history, or database.
 
 The app includes a deterministic preview engine so the complete interaction works without credentials. Add an OpenAI-compatible API key to use live model-generated drafts.
@@ -38,6 +39,12 @@ Outlook is optional; paste-in and copy-out continue to work without it. To enabl
 5. Set `OUTLOOK_COOKIE_SECRET` to a random value of at least 32 characters, then restart the server.
 
 The authorization flow uses PKCE. Access and refresh tokens are encrypted into HttpOnly, SameSite cookies and are never exposed to browser JavaScript. The integration only creates a reply draft; it does not request `Mail.Send` or send messages.
+
+## Local CRM
+
+When Outlook is connected, ReplyReady performs an initial 30-day Inbox sync and then uses Microsoft Graph delta links to fetch only additions, updates, and removals every 30 seconds. Emails appear in four stages: New, Needs reply, Draft ready, and Done.
+
+The stage, priority flag, and note are intentionally device-local for this MVP and stay in browser storage. Outlook remains the source of truth for the actual email. A future multi-user CRM should move this workflow state into a database and use Microsoft Graph webhooks while the app is closed.
 
 ## Demo flow
 
