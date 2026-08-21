@@ -12,6 +12,7 @@ ReplyReady turns the difficult email you have been avoiding into three clear, re
 - Edit any draft directly and copy it when it feels right.
 - Optionally connect Outlook, import one inbox message, and save a selected reply to Drafts.
 - Track incoming mail on a four-stage CRM board that refreshes every 30 seconds.
+- Register or log in with Microsoft; the same secure sign-in connects Outlook to the CRM.
 - No automatic sending, message history, or database.
 
 The app includes a deterministic preview engine so the complete interaction works without credentials. Add an OpenAI-compatible API key to use live model-generated drafts.
@@ -39,6 +40,12 @@ Outlook is optional; paste-in and copy-out continue to work without it. To enabl
 5. Set `OUTLOOK_COOKIE_SECRET` to a random value of at least 32 characters, then restart the server.
 
 The authorization flow uses PKCE. Access and refresh tokens are encrypted into HttpOnly, SameSite cookies and are never exposed to browser JavaScript. The integration only creates a reply draft; it does not request `Mail.Send` or send messages.
+
+## Account registration
+
+ReplyReady uses Microsoft as its account provider. Selecting **Sign up** or **Log in** starts the same OAuth flow: a successful first sign-in creates the local ReplyReady session and connects that Microsoft mailbox. ReplyReady does not collect or store a separate password.
+
+The registration screen remains available before Microsoft Entra credentials are configured, but its Microsoft button is disabled with a setup explanation. Users can always continue in demo mode without an account.
 
 ## Local CRM
 

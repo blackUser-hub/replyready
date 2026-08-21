@@ -31,6 +31,7 @@ type OutlookMessage = {
 
 type CrmStage = "new" | "needs_reply" | "draft_ready" | "done";
 type CrmFilter = "all" | "unread" | "priority";
+type AuthMode = "signup" | "login";
 
 type CrmRecord = OutlookMessage & {
   stage: CrmStage;
@@ -169,6 +170,8 @@ export function ReplyReadyApp() {
   const [messages, setMessages] = useState<OutlookMessage[]>([]);
   const [selectedMessage, setSelectedMessage] = useState<OutlookMessage | null>(null);
   const [outlookNotice, setOutlookNotice] = useState("");
+  const [authModal, setAuthModal] = useState<AuthMode | null>(null);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [savingDraft, setSavingDraft] = useState<StrategyKind | null>(null);
   const [savedDraft, setSavedDraft] = useState<StrategyKind | null>(null);
   const [crmRecords, setCrmRecords] = useState<CrmRecord[]>([]);
@@ -223,6 +226,17 @@ export function ReplyReadyApp() {
         setOutlook({ loading: false, ...payload });
       })
       .catch(() => setOutlook({ loading: false, configured: false, connected: false }));
+  }, []);
+
+  useEffect(() => {
+    function closeOverlays(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      setAuthModal(null);
+      setAccountMenuOpen(false);
+    }
+
+    window.addEventListener("keydown", closeOverlays);
+    return () => window.removeEventListener("keydown", closeOverlays);
   }, []);
 
   useEffect(() => {
@@ -380,6 +394,7 @@ export function ReplyReadyApp() {
   async function disconnectOutlook() {
     await fetch("/api/outlook/disconnect", { method: "POST" });
     setOutlook({ loading: false, configured: true, connected: false });
+    setAccountMenuOpen(false);
     setMessages([]);
     setSelectedMessage(null);
     setInboxOpen(false);
@@ -470,11 +485,127 @@ export function ReplyReadyApp() {
           <span className="brand-mark" aria-hidden="true">R</span>
           <span>ReplyReady</span>
         </a>
-        <div className="topbar-note">
-          <span className="status-dot" aria-hidden="true" />
-          Decision support for difficult emails
+        <div className="topbar-right">
+          <div className="topbar-note">
+            <span className="status-dot" aria-hidden="true" />
+            Decision support for difficult emails
+          </div>
+          {outlook.loading ? (
+            <span className="account-loading" aria-label="Checking account" />
+          ) : outlook.connected ? (
+            <div className="account-control">
+              <button
+                type="button"
+                className="account-button"
+                aria-haspopup="menu"
+                aria-expanded={accountMenuOpen}
+                onClick={() => setAccountMenuOpen((open) => !open)}
+              >
+                <span className="account-avatar" aria-hidden="true">
+                  {(outlook.user?.name || "R").slice(0, 1).toUpperCase()}
+                </span>
+                <span>{outlook.user?.name || "My account"}</span>
+                <span className="account-chevron" aria-hidden="true">⌄</span>
+              </button>
+              {accountMenuOpen ? (
+                <div className="account-menu" role="menu">
+                  <div className="account-menu-identity">
+                    <strong>{outlook.user?.name || "ReplyReady account"}</strong>
+                    <span>{outlook.user?.email || "Microsoft account"}</span>
+                  </div>
+                  <div className="account-menu-status">
+                    <span aria-hidden="true" /> Outlook connected
+                  </div>
+                  <button type="button" role="menuitem" onClick={() => void disconnectOutlook()}>
+                    Sign out
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <div className="auth-actions">
+              <button type="button" className="login-button" onClick={() => setAuthModal("login")}>
+                Log in
+              </button>
+              <button type="button" className="signup-button" onClick={() => setAuthModal("signup")}>
+                Sign up
+              </button>
+            </div>
+          )}
         </div>
       </header>
+
+      {authModal ? (
+        <div
+          className="auth-modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setAuthModal(null);
+          }}
+        >
+          <section
+            className="auth-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="auth-modal-title"
+          >
+            <button
+              type="button"
+              className="auth-modal-close"
+              aria-label="Close account dialog"
+              onClick={() => setAuthModal(null)}
+            >
+              ×
+            </button>
+            <span className="auth-brand-mark" aria-hidden="true">R</span>
+            <p className="eyebrow">{authModal === "signup" ? "Your ReplyReady account" : "Good to see you again"}</p>
+            <h2 id="auth-modal-title">
+              {authModal === "signup" ? "Create your account" : "Welcome back"}
+            </h2>
+            <p className="auth-modal-copy">
+              {authModal === "signup"
+                ? "Register with Microsoft to connect Outlook and turn new emails into a live CRM automatically."
+                : "Log in with the Microsoft account already connected to your ReplyReady workspace."}
+            </p>
+
+            <div className="auth-benefits" aria-label="Account benefits">
+              <span><b aria-hidden="true">01</b> Live Outlook inbox</span>
+              <span><b aria-hidden="true">02</b> Automatic CRM sync</span>
+              <span><b aria-hidden="true">03</b> Reply drafts in Outlook</span>
+            </div>
+
+            {outlook.configured ? (
+              <a className="microsoft-auth-button" href="/api/outlook/connect">
+                <span className="microsoft-mark" aria-hidden="true"><i /><i /><i /><i /></span>
+                Continue with Microsoft
+              </a>
+            ) : (
+              <>
+                <button type="button" className="microsoft-auth-button disabled" disabled>
+                  <span className="microsoft-mark" aria-hidden="true"><i /><i /><i /><i /></span>
+                  Microsoft setup required
+                </button>
+                <p className="auth-setup-note">
+                  Add the Microsoft Entra credentials to <code>.env.local</code> and restart the local server to enable real registration.
+                </p>
+              </>
+            )}
+
+            <button type="button" className="demo-mode-button" onClick={() => setAuthModal(null)}>
+              Continue in demo mode
+            </button>
+            <p className="auth-switch">
+              {authModal === "signup" ? "Already registered?" : "New to ReplyReady?"}{" "}
+              <button
+                type="button"
+                onClick={() => setAuthModal(authModal === "signup" ? "login" : "signup")}
+              >
+                {authModal === "signup" ? "Log in" : "Create account"}
+              </button>
+            </p>
+            <p className="auth-privacy">Secure Microsoft sign-in. ReplyReady never stores your password or sends email automatically.</p>
+          </section>
+        </div>
+      ) : null}
 
       <section className="hero" id="top">
         <p className="eyebrow">Stop staring at the reply box</p>
