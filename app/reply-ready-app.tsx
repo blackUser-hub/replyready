@@ -211,11 +211,14 @@ export function ReplyReadyApp() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get("outlook") === "connected") {
-      setOutlookNotice("Outlook connected. Choose an email from your inbox.");
-    } else if (params.has("outlook_error")) {
-      setOutlookNotice("Microsoft sign-in was not completed. Please try again.");
-    }
+    const callbackNotice = params.get("outlook") === "connected"
+      ? "Outlook connected. Choose an email from your inbox."
+      : params.has("outlook_error")
+        ? "Microsoft sign-in was not completed. Please try again."
+        : "";
+    const noticeTimer = callbackNotice
+      ? window.setTimeout(() => setOutlookNotice(callbackNotice), 0)
+      : null;
     if (params.has("outlook") || params.has("outlook_error")) {
       window.history.replaceState({}, "", window.location.pathname);
     }
@@ -226,6 +229,10 @@ export function ReplyReadyApp() {
         setOutlook({ loading: false, ...payload });
       })
       .catch(() => setOutlook({ loading: false, configured: false, connected: false }));
+
+    return () => {
+      if (noticeTimer !== null) window.clearTimeout(noticeTimer);
+    };
   }, []);
 
   useEffect(() => {
@@ -240,19 +247,23 @@ export function ReplyReadyApp() {
   }, []);
 
   useEffect(() => {
-    try {
-      const savedRecords = window.localStorage.getItem("replyready.crm.records.v1");
-      const savedDelta = window.localStorage.getItem("replyready.crm.delta.v1");
-      const savedSync = window.localStorage.getItem("replyready.crm.last-sync.v1");
-      if (savedRecords) setCrmRecords(JSON.parse(savedRecords) as CrmRecord[]);
-      if (savedDelta) deltaLinkRef.current = savedDelta;
-      if (savedSync) setLastSync(savedSync);
-    } catch {
-      window.localStorage.removeItem("replyready.crm.records.v1");
-      window.localStorage.removeItem("replyready.crm.delta.v1");
-    } finally {
-      setCrmLoaded(true);
-    }
+    const hydrationTimer = window.setTimeout(() => {
+      try {
+        const savedRecords = window.localStorage.getItem("replyready.crm.records.v1");
+        const savedDelta = window.localStorage.getItem("replyready.crm.delta.v1");
+        const savedSync = window.localStorage.getItem("replyready.crm.last-sync.v1");
+        if (savedRecords) setCrmRecords(JSON.parse(savedRecords) as CrmRecord[]);
+        if (savedDelta) deltaLinkRef.current = savedDelta;
+        if (savedSync) setLastSync(savedSync);
+      } catch {
+        window.localStorage.removeItem("replyready.crm.records.v1");
+        window.localStorage.removeItem("replyready.crm.delta.v1");
+      } finally {
+        setCrmLoaded(true);
+      }
+    }, 0);
+
+    return () => window.clearTimeout(hydrationTimer);
   }, []);
 
   useEffect(() => {
@@ -480,68 +491,52 @@ export function ReplyReadyApp() {
 
   return (
     <main className="app-shell">
-      <header className="topbar">
-        <a className="brand" href="#top" aria-label="ReplyReady home">
-          <span className="brand-mark" aria-hidden="true">R</span>
-          <span>ReplyReady</span>
-        </a>
-        <div className="topbar-right">
-          <div className="topbar-note">
-            <span className="status-dot" aria-hidden="true" />
-            Decision support for difficult emails
-          </div>
-          {outlook.loading ? (
-            <span className="account-loading" aria-label="Checking account" />
-          ) : outlook.connected ? (
-            <div className="account-control">
-              <button
-                type="button"
-                className="account-button"
-                aria-haspopup="menu"
-                aria-expanded={accountMenuOpen}
-                onClick={() => setAccountMenuOpen((open) => !open)}
-              >
-                <span className="account-avatar" aria-hidden="true">
-                  {(outlook.user?.name || "R").slice(0, 1).toUpperCase()}
-                </span>
-                <span>{outlook.user?.name || "My account"}</span>
-                <span className="account-chevron" aria-hidden="true">⌄</span>
-              </button>
-              {accountMenuOpen ? (
-                <div className="account-menu" role="menu">
-                  <div className="account-menu-identity">
-                    <strong>{outlook.user?.name || "ReplyReady account"}</strong>
-                    <span>{outlook.user?.email || "Microsoft account"}</span>
-                  </div>
-                  <div className="account-menu-status">
-                    <span aria-hidden="true" /> Outlook connected
-                  </div>
-                  <button type="button" role="menuitem" onClick={() => void disconnectOutlook()}>
-                    Sign out
-                  </button>
-                </div>
-              ) : null}
-            </div>
-          ) : (
-            <div className="auth-actions">
-              <button type="button" className="login-button" onClick={() => setAuthModal("login")}>
-                Log in
-              </button>
-              <button type="button" className="signup-button" onClick={() => setAuthModal("signup")}>
-                Sign up
-              </button>
-            </div>
-          )}
+      <section className="intro" id="top" aria-labelledby="page-title">
+        <div>
+          <h1 id="page-title">ReplyReady</h1>
+          <p>Paste a difficult email and choose from three practical replies.</p>
         </div>
-      </header>
+        {outlook.loading ? (
+          <span className="account-loading" aria-label="Checking account" />
+        ) : outlook.connected ? (
+          <div className="account-control">
+            <button
+              type="button"
+              className="account-button"
+              aria-haspopup="menu"
+              aria-expanded={accountMenuOpen}
+              onClick={() => setAccountMenuOpen((open) => !open)}
+            >
+              <span className="account-avatar" aria-hidden="true">
+                {(outlook.user?.name || "R").slice(0, 1).toUpperCase()}
+              </span>
+              <span>{outlook.user?.name || "Outlook"}</span>
+              <span className="account-chevron" aria-hidden="true">⌄</span>
+            </button>
+            {accountMenuOpen ? (
+              <div className="account-menu" role="menu">
+                <div className="account-menu-identity">
+                  <strong>{outlook.user?.name || "ReplyReady account"}</strong>
+                  <span>{outlook.user?.email || "Microsoft account"}</span>
+                </div>
+                <div className="account-menu-status">
+                  <span aria-hidden="true" /> Outlook connected
+                </div>
+                <button type="button" role="menuitem" onClick={() => void disconnectOutlook()}>
+                  Sign out
+                </button>
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <button type="button" className="signup-button" onClick={() => setAuthModal("signup")}>
+            Connect Outlook
+          </button>
+        )}
+      </section>
 
       {authModal ? (
-        <div
-          className="auth-modal-backdrop"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setAuthModal(null);
-          }}
-        >
+        <div className="auth-modal-backdrop">
           <section
             className="auth-modal"
             role="dialog"
@@ -556,22 +551,14 @@ export function ReplyReadyApp() {
             >
               ×
             </button>
-            <span className="auth-brand-mark" aria-hidden="true">R</span>
-            <p className="eyebrow">{authModal === "signup" ? "Your ReplyReady account" : "Good to see you again"}</p>
             <h2 id="auth-modal-title">
-              {authModal === "signup" ? "Create your account" : "Welcome back"}
+              {authModal === "signup" ? "Connect Outlook" : "Log in"}
             </h2>
             <p className="auth-modal-copy">
               {authModal === "signup"
-                ? "Register with Microsoft to connect Outlook and turn new emails into a live CRM automatically."
-                : "Log in with the Microsoft account already connected to your ReplyReady workspace."}
+                ? "Use your Microsoft account to import emails and save reply drafts."
+                : "Continue with the Microsoft account connected to ReplyReady."}
             </p>
-
-            <div className="auth-benefits" aria-label="Account benefits">
-              <span><b aria-hidden="true">01</b> Live Outlook inbox</span>
-              <span><b aria-hidden="true">02</b> Automatic CRM sync</span>
-              <span><b aria-hidden="true">03</b> Reply drafts in Outlook</span>
-            </div>
 
             {outlook.configured ? (
               <a className="microsoft-auth-button" href="/api/outlook/connect">
@@ -602,22 +589,13 @@ export function ReplyReadyApp() {
                 {authModal === "signup" ? "Log in" : "Create account"}
               </button>
             </p>
-            <p className="auth-privacy">Secure Microsoft sign-in. ReplyReady never stores your password or sends email automatically.</p>
+            <p className="auth-privacy">ReplyReady never sends email automatically.</p>
           </section>
         </div>
       ) : null}
 
-      <section className="hero" id="top">
-        <p className="eyebrow">Stop staring at the reply box</p>
-        <h1>Three ways forward.<br /><em>None of them blank.</em></h1>
-        <p className="hero-copy">
-          Paste the email you have been avoiding. Get three ready-to-send replies,
-          each taking a clear and genuinely different position.
-        </p>
-      </section>
-
       <section className="crm-section" aria-label="Outlook CRM">
-        <header className="crm-header">
+        <div className="crm-header">
           <div>
             <div className="crm-title-line">
               <span className="step-label">Outlook CRM</span>
@@ -626,15 +604,15 @@ export function ReplyReadyApp() {
                 {outlook.connected ? "Live inbox" : "Preview data"}
               </span>
             </div>
-            <h2>Every difficult email, moving forward.</h2>
-            <p>New mail appears automatically. Decide, draft, and move on.</p>
+            <h2>Inbox</h2>
+            <p>Keep track of emails that need a reply.</p>
           </div>
           <div className="crm-summary">
             <div><strong>{activeCrmRecords.length}</strong><span>Tracked</span></div>
             <div><strong>{unreadCount}</strong><span>Unread</span></div>
             <div><strong>{waitingCount}</strong><span>Waiting</span></div>
           </div>
-        </header>
+        </div>
 
         <div className="crm-toolbar">
           <label className="crm-search">
@@ -682,12 +660,15 @@ export function ReplyReadyApp() {
                 <p className="crm-column-hint">{stage.hint}</p>
                 <div className="crm-card-list">
                   {records.length ? records.map((record) => (
-                    <article
+                    <div
                       className={`crm-card ${record.priority ? "priority" : ""} ${selectedMessage?.id === record.id ? "selected" : ""}`}
                       key={record.id}
                       role="button"
                       tabIndex={0}
-                      onClick={() => void openCrmRecord(record)}
+                      onClick={(event) => {
+                        if ((event.target as HTMLElement).closest("button, input, select")) return;
+                        void openCrmRecord(record);
+                      }}
                       onKeyDown={(event) => {
                         if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) {
                           event.preventDefault();
@@ -717,7 +698,7 @@ export function ReplyReadyApp() {
                       </div>
                       <h3>{record.subject}</h3>
                       <p>{record.preview}</p>
-                      <div className="crm-card-fields" onClick={(event) => event.stopPropagation()}>
+                      <div className="crm-card-fields">
                         <select
                           aria-label={`Stage for ${record.subject}`}
                           value={record.stage}
@@ -740,7 +721,7 @@ export function ReplyReadyApp() {
                         </time>
                         <span>Open in ReplyReady →</span>
                       </div>
-                    </article>
+                    </div>
                   )) : (
                     <div className="crm-empty">No emails here</div>
                   )}
@@ -899,12 +880,11 @@ export function ReplyReadyApp() {
         <div className="results-panel">
           <div className="results-heading">
             <div>
-              <span className="step-label">Ready to send</span>
-              <h2>Choose your position</h2>
+              <span className="step-label">Replies</span>
+              <h2>Choose an approach</h2>
             </div>
             <span className="engine-badge">
-              <span aria-hidden="true">✦</span>
-              {engine === "ai" ? "AI generated" : "Preview engine"}
+              {engine === "ai" ? "Generated" : "Preview"}
             </span>
           </div>
 
@@ -961,10 +941,7 @@ export function ReplyReadyApp() {
         </div>
       </section>
 
-      <footer>
-        <span>ReplyReady © 2026</span>
-        <span>One email in. Three clear decisions out.</span>
-      </footer>
+      <footer>ReplyReady · 2026</footer>
     </main>
   );
 }
