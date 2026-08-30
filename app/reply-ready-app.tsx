@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 
 type Tone = "warmer" | "neutral" | "firmer";
 type StrategyKind = "hold_firm" | "smaller_scope" | "meet_middle";
@@ -32,6 +33,7 @@ type OutlookMessage = {
 type CrmStage = "new" | "needs_reply" | "draft_ready" | "done";
 type CrmFilter = "all" | "unread" | "priority";
 type AuthMode = "signup" | "login";
+type AppView = "compose" | "crm";
 
 type CrmRecord = OutlookMessage & {
   stage: CrmStage;
@@ -51,14 +53,14 @@ const crmStages: Array<{ id: CrmStage; label: string; hint: string }> = [
 const previewCrmRecords: CrmRecord[] = [
   {
     id: "preview-1",
-    subject: "Can we revisit the project fee?",
-    preview: "The revised budget is lower than expected, but we would like to keep the launch date…",
+    subject: "Northstar Coffee — revised launch budget",
+    preview: "Finance approved $12,500, but the November launch date and store features are still important…",
     receivedAt: "2026-08-11T08:42:00.000Z",
     isRead: false,
-    from: { name: "Morgan Lee", address: "morgan@example.com" },
+    from: { name: "Maya Chen", address: "maya@northstarcoffee.example" },
     stage: "new",
     priority: true,
-    note: "30% discount request",
+    note: "Budget decision due Friday",
   },
   {
     id: "preview-2",
@@ -97,23 +99,23 @@ const previewCrmRecords: CrmRecord[] = [
 
 const sampleEmail = `Hi Alex,
 
-We reviewed the proposal again and need to bring the total down by 30%. Since the project is already underway, we were hoping you could keep the full scope and absorb the difference. We see this as a long-term partnership and there should be more work later in the year.
+Finance approved $12,500 for the Northstar Coffee online-store redesign, rather than the $18,000 in your proposal. We still need the new product pages, subscriptions, store locator, and the November 4 launch date.
 
-Could you confirm the new price by tomorrow so we can keep the current launch date?
+Could you confirm by Friday whether you can keep the full scope at the new budget? If not, please show us what would need to move into a second phase.
 
 Best,
-Morgan`;
+Maya`;
 
 const initialDrafts: Draft[] = [
   {
     kind: "hold_firm",
     label: "Hold firm",
     stance: "Protect the agreed price and scope",
-    body: `Hi Morgan,
+    body: `Hi Maya,
 
-Thanks for being direct about the budget. I’m not able to reduce the fee by 30% while keeping the agreed scope and launch date. The current price reflects the work already underway and the resources reserved to deliver it well.
+Thanks for sharing the approved budget. I’m not able to reduce the fee from $18,000 to $12,500 while keeping all four deliverables and the November 4 launch date. The proposal reflects the design and development time required for that scope.
 
-I’m happy to continue with the original agreement and timeline. If the budget has changed, I can outline a smaller scope as a separate option.
+I can keep the original scope and schedule at $18,000, or send a phased option for the approved budget by Friday.
 
 Best,
 Alex`,
@@ -122,11 +124,11 @@ Alex`,
     kind: "smaller_scope",
     label: "Reduce scope",
     stance: "Match the budget by changing the work",
-    body: `Hi Morgan,
+    body: `Hi Maya,
 
-Thanks for the context. We can get closer to the revised budget, but we’ll need to adjust the scope so the project remains viable.
+Thanks for the clear numbers. We can work within $12,500 if we narrow the first release.
 
-I suggest keeping the core launch deliverables and moving the secondary features into a later phase. I can send a revised scope showing exactly what stays, what moves, and the updated price by tomorrow.
+I suggest launching the product pages and checkout on November 4, then moving subscriptions and the store locator into a second phase. I can send the revised scope and timeline by Friday.
 
 Best,
 Alex`,
@@ -135,11 +137,11 @@ Alex`,
     kind: "meet_middle",
     label: "Meet halfway",
     stance: "Share the concession with clear terms",
-    body: `Hi Morgan,
+    body: `Hi Maya,
 
-I value the partnership and want to find a workable path. I can offer a 12% reduction if we keep the current scope, with the remaining balance split across two payment dates.
+I’d like to find a workable middle ground. I can deliver the full scope for $15,500 if we use the existing product photography and move the subscription dashboard to the week after launch.
 
-That lets us protect the launch date and quality without reopening work already in progress. If that works for you, I’ll send the revised schedule tomorrow.
+That keeps the public November 4 launch date while reducing both cost and production time. If that works, I’ll send the revised schedule by Friday.
 
 Best,
 Alex`,
@@ -152,10 +154,11 @@ const strategyNumbers: Record<StrategyKind, string> = {
   meet_middle: "03",
 };
 
-export function ReplyReadyApp() {
+export function ReplyReadyApp({ view = "compose" }: { view?: AppView }) {
   const [email, setEmail] = useState(sampleEmail);
   const [tone, setTone] = useState<Tone>("neutral");
   const [drafts, setDrafts] = useState<Draft[]>(initialDrafts);
+  const [selectedStrategy, setSelectedStrategy] = useState<StrategyKind>("hold_firm");
   const [isGenerating, setIsGenerating] = useState(false);
   const [copied, setCopied] = useState<StrategyKind | null>(null);
   const [engine, setEngine] = useState<"preview" | "ai">("preview");
@@ -184,10 +187,22 @@ export function ReplyReadyApp() {
   const deltaLinkRef = useRef<string | null>(null);
   const syncingRef = useRef(false);
 
+  useEffect(() => {
+    if (view !== "compose") return;
+    const imported = window.sessionStorage.getItem("replyready:imported-email");
+    if (!imported) return;
+    const timer = window.setTimeout(() => {
+      setEmail(imported);
+      window.sessionStorage.removeItem("replyready:imported-email");
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [view]);
+
   const wordCount = useMemo(
     () => email.trim().split(/\s+/).filter(Boolean).length,
     [email],
   );
+  const selectedDraft = drafts.find((draft) => draft.kind === selectedStrategy) ?? drafts[0];
 
   const activeCrmRecords = outlook.connected ? crmRecords : previewRecords;
   const visibleCrmRecords = useMemo(() => {
@@ -340,21 +355,20 @@ export function ReplyReadyApp() {
   }
 
   async function openCrmRecord(record: CrmRecord) {
+    const sender = record.from.address
+      ? `${record.from.name} <${record.from.address}>`
+      : record.from.name;
+    const importedEmail = `From: ${sender}\nSubject: ${record.subject}\n\n${record.body || record.preview}`;
     if (outlook.connected) {
       await selectOutlookMessage(record);
     } else {
-      const sender = record.from.address
-        ? `${record.from.name} <${record.from.address}>`
-        : record.from.name;
-      setEmail(`From: ${sender}\nSubject: ${record.subject}\n\n${record.preview}`);
+      setEmail(importedEmail);
       setSelectedMessage(null);
       setOutlookNotice("Preview email loaded. Connect Outlook to create a real linked draft.");
     }
     updateCrmRecord(record.id, { stage: "needs_reply" });
-    window.setTimeout(
-      () => document.getElementById("reply-workspace")?.scrollIntoView({ behavior: "smooth", block: "start" }),
-      50,
-    );
+    window.sessionStorage.setItem("replyready:imported-email", importedEmail);
+    window.location.assign("/");
   }
 
   async function loadInbox() {
@@ -491,10 +505,18 @@ export function ReplyReadyApp() {
 
   return (
     <main className="app-shell">
+      <header className="app-header">
+        <Link className="app-brand" aria-label="ReplyReady" href="/">ReplyReady</Link>
+        <nav aria-label="Application">
+          <Link className={view === "compose" ? "active" : ""} href="/">Write reply</Link>
+          <Link className={view === "crm" ? "active" : ""} href="/crm">Inbox CRM</Link>
+        </nav>
+      </header>
+      <div className="zero-main" data-view={view}>
       <section className="intro" id="top" aria-labelledby="page-title">
         <div>
-          <h1 id="page-title">ReplyReady</h1>
-          <p>Paste a difficult email and choose from three practical replies.</p>
+          <h1 id="page-title">{view === "crm" ? "Inbox CRM" : "Write a reply"}</h1>
+          <p>{view === "crm" ? "Track incoming conversations and move them toward a reply." : "Paste the message, choose a position, and edit the draft."}</p>
         </div>
         {outlook.loading ? (
           <span className="account-loading" aria-label="Checking account" />
@@ -529,9 +551,7 @@ export function ReplyReadyApp() {
             ) : null}
           </div>
         ) : (
-          <button type="button" className="signup-button" onClick={() => setAuthModal("signup")}>
-            Connect Outlook
-          </button>
+          <span className="account-offline">Outlook not connected</span>
         )}
       </section>
 
@@ -594,7 +614,7 @@ export function ReplyReadyApp() {
         </div>
       ) : null}
 
-      <section className="crm-section" aria-label="Outlook CRM">
+      <section className="crm-section" id="crm" aria-label="Outlook CRM">
         <div className="crm-header">
           <div>
             <div className="crm-title-line">
@@ -741,8 +761,7 @@ export function ReplyReadyApp() {
         <div className="composer-panel">
           <div className="panel-heading">
             <div>
-              <span className="step-label">Incoming</span>
-              <h2>The difficult email</h2>
+              <h2>Source email</h2>
             </div>
             <button
               className="text-button"
@@ -756,9 +775,8 @@ export function ReplyReadyApp() {
           <section className={`outlook-connector ${outlook.connected ? "connected" : ""}`} aria-label="Outlook connection">
             <div className="outlook-connector-row">
               <div className="outlook-identity">
-                <span className="outlook-mark" aria-hidden="true">O</span>
                 <div>
-                  <strong>{outlook.connected ? outlook.user?.name || "Outlook connected" : "Bring in an Outlook email"}</strong>
+                  <strong>{outlook.connected ? outlook.user?.name || "Outlook connected" : "Import from Outlook"}</strong>
                   <span>
                     {outlook.loading
                       ? "Checking connection…"
@@ -877,71 +895,78 @@ export function ReplyReadyApp() {
           {error ? <p className="error-message" role="alert">{error}</p> : null}
         </div>
 
-        <div className="results-panel">
+        <div className="results-panel" id="replies">
           <div className="results-heading">
             <div>
-              <span className="step-label">Replies</span>
-              <h2>Choose an approach</h2>
+              <h2>Reply draft</h2>
+              <span className="results-subtitle">Pick a version, then edit it directly.</span>
             </div>
-            <span className="engine-badge">
-              {engine === "ai" ? "Generated" : "Preview"}
-            </span>
+            <span className="draft-status">{engine === "ai" ? "Updated" : "3 versions"}</span>
           </div>
 
-          <div className="draft-grid" aria-live="polite" aria-busy={isGenerating}>
+          <div className="draft-version-list" role="tablist" aria-label="Reply versions">
             {drafts.map((draft) => (
-              <article className={`draft-card ${draft.kind}`} key={draft.kind}>
-                <div className="card-topline">
-                  <span className="strategy-number">{strategyNumbers[draft.kind]}</span>
-                  <span className="tone-pill">{tone}</span>
-                </div>
-                <h3>{draft.label}</h3>
-                <p className="stance">{draft.stance}</p>
-                <label className="sr-only" htmlFor={`draft-${draft.kind}`}>
-                  Edit {draft.label} reply
-                </label>
-                <textarea
-                  id={`draft-${draft.kind}`}
-                  className="draft-body"
-                  value={draft.body}
-                  onChange={(event) => updateDraft(draft.kind, event.target.value)}
-                  spellCheck="true"
-                />
-                <div className="card-actions">
-                  <span>{draft.body.trim().split(/\s+/).length} words</span>
-                  <div className="card-button-group">
-                    {outlook.connected && selectedMessage ? (
-                      <button
-                        type="button"
-                        className="save-outlook-button"
-                        disabled={savingDraft !== null}
-                        onClick={() => void saveToOutlook(draft)}
-                      >
-                        {savingDraft === draft.kind
-                          ? "Saving…"
-                          : savedDraft === draft.kind
-                            ? "Saved ✓"
-                            : "Save draft"}
-                      </button>
-                    ) : null}
-                    <button type="button" onClick={() => void copyDraft(draft)}>
-                      {copied === draft.kind ? "Copied ✓" : "Copy reply"}
-                    </button>
-                  </div>
-                </div>
-                {isGenerating ? (
-                  <div className="card-loading" aria-hidden="true">
-                    <span /><span /><span /><span />
-                  </div>
-                ) : null}
-              </article>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={selectedStrategy === draft.kind}
+                className={selectedStrategy === draft.kind ? "active" : ""}
+                onClick={() => setSelectedStrategy(draft.kind)}
+                key={draft.kind}
+              >
+                <span>{strategyNumbers[draft.kind]}</span>
+                <strong>{draft.label}</strong>
+                <small>{draft.stance}</small>
+              </button>
             ))}
           </div>
-          <p className="edit-note">Every draft is editable. Make it yours before you send.</p>
+
+          <article className="draft-editor" aria-live="polite" aria-busy={isGenerating}>
+            <div className="draft-editor-bar">
+              <div>
+                <strong>{selectedDraft.label}</strong>
+                <span>{selectedDraft.stance}</span>
+              </div>
+              <span className="plain-tone">Tone: {tone}</span>
+            </div>
+            <label className="sr-only" htmlFor={`draft-${selectedDraft.kind}`}>
+              Edit {selectedDraft.label} reply
+            </label>
+            <textarea
+              id={`draft-${selectedDraft.kind}`}
+              className="draft-body"
+              value={selectedDraft.body}
+              onChange={(event) => updateDraft(selectedDraft.kind, event.target.value)}
+              spellCheck="true"
+            />
+            <div className="card-actions">
+              <span>{selectedDraft.body.trim().split(/\s+/).length} words</span>
+              <div className="card-button-group">
+                {outlook.connected && selectedMessage ? (
+                  <button
+                    type="button"
+                    className="save-outlook-button"
+                    disabled={savingDraft !== null}
+                    onClick={() => void saveToOutlook(selectedDraft)}
+                  >
+                    {savingDraft === selectedDraft.kind
+                      ? "Saving…"
+                      : savedDraft === selectedDraft.kind
+                        ? "Saved ✓"
+                        : "Save to Outlook"}
+                  </button>
+                ) : null}
+                <button type="button" onClick={() => void copyDraft(selectedDraft)}>
+                  {copied === selectedDraft.kind ? "Copied ✓" : "Copy reply"}
+                </button>
+              </div>
+            </div>
+            {isGenerating ? <div className="editor-loading">Preparing the drafts…</div> : null}
+          </article>
+          <p className="edit-note">Nothing is sent automatically.</p>
         </div>
       </section>
-
-      <footer>ReplyReady · 2026</footer>
+      </div>
     </main>
   );
 }

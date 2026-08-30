@@ -12,6 +12,28 @@ const kinds: StrategyKind[] = ["hold_firm", "smaller_scope", "meet_middle"];
 
 function previewDrafts(tone: Tone, email: string): Draft[] {
   const lower = email.toLowerCase();
+  if (lower.includes("northstar coffee") && lower.includes("$12,500")) {
+    return [
+      {
+        kind: "hold_firm",
+        label: "Hold firm",
+        stance: "Keep the agreed scope and fee",
+        body: `Hi Maya,\n\nThanks for sharing the approved budget. I’m not able to reduce the fee from $18,000 to $12,500 while keeping all four deliverables and the November 4 launch date. The proposal reflects the design and development time required for that scope.\n\nI can keep the original scope and schedule at $18,000, or send a phased option for the approved budget by Friday.\n\nBest,\nAlex`,
+      },
+      {
+        kind: "smaller_scope",
+        label: "Reduce scope",
+        stance: "Fit phase one to the budget",
+        body: `Hi Maya,\n\nThanks for the clear numbers. We can work within $12,500 if we narrow the first release.\n\nI suggest launching the product pages and checkout on November 4, then moving subscriptions and the store locator into a second phase. I can send the revised scope and timeline by Friday.\n\nBest,\nAlex`,
+      },
+      {
+        kind: "meet_middle",
+        label: "Meet halfway",
+        stance: "Adjust cost and delivery together",
+        body: `Hi Maya,\n\nI’d like to find a workable middle ground. I can deliver the full scope for $15,500 if we use the existing product photography and move the subscription dashboard to the week after launch.\n\nThat keeps the public November 4 launch date while reducing both cost and production time. If that works, I’ll send the revised schedule by Friday.\n\nBest,\nAlex`,
+      },
+    ];
+  }
   const isDeadline = /deadline|late|delay|overdue|launch date/.test(lower);
   const isScope = /extra|scope|additional|another round|revision/.test(lower);
   const warmOpen = tone === "warmer" ? "Thank you for reaching out — I appreciate the candid note." : tone === "firmer" ? "Thanks for the note. I want to be clear about what we can commit to." : "Thanks for the note and for sharing the context.";
@@ -78,13 +100,13 @@ export async function POST(request: Request) {
       return Response.json({ error: "Choose a valid tone." }, { status: 400 });
     }
 
-    const apiKey = process.env.OPENAI_API_KEY;
+    const apiKey = process.env.DEEPSEEK_API_KEY;
     if (!apiKey) {
       return Response.json({ drafts: previewDrafts(tone, email), mode: "preview" });
     }
 
-    const endpoint = process.env.AI_API_URL || "https://api.openai.com/v1/chat/completions";
-    const model = process.env.AI_MODEL || "gpt-4.1-mini";
+    const endpoint = process.env.DEEPSEEK_API_URL || "https://api.deepseek.com/chat/completions";
+    const model = process.env.DEEPSEEK_MODEL || "deepseek-v4-flash";
     const aiResponse = await fetch(endpoint, {
       method: "POST",
       headers: {
@@ -93,12 +115,13 @@ export async function POST(request: Request) {
       },
       body: JSON.stringify({
         model,
+        thinking: { type: "disabled" },
         temperature: 0.65,
         response_format: { type: "json_object" },
         messages: [
           {
             role: "system",
-            content: `You are ReplyReady, a negotiation-aware email assistant. Return valid JSON with one key, "drafts", containing exactly three objects in this order:
+            content: `You are ReplyReady, a negotiation-aware email assistant. Return valid JSON with one key, "drafts", containing exactly three reply drafts in this order:
 1) kind "hold_firm": politely protect the user's position.
 2) kind "smaller_scope": preserve the relationship by reducing deliverables or commitment.
 3) kind "meet_middle": propose a concrete, balanced compromise.
@@ -106,6 +129,7 @@ Each object must have kind, label, stance (max 8 words), and body. The strategie
           },
           { role: "user", content: email },
         ],
+        max_tokens: 1800,
       }),
     });
 
